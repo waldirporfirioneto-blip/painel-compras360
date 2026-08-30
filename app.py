@@ -78,7 +78,7 @@ df_filtrado = df[
     (df['COMPRADOR'].isin(compradores_selecionados))
 ]
 
-# NOVO: Botão de Exportação
+# Botão de Exportação
 st.sidebar.divider()
 st.sidebar.title("📥 Exportar Relatório")
 @st.cache_data
@@ -93,11 +93,23 @@ st.sidebar.download_button(
     mime='text/csv'
 )
 
+# NOVO: Créditos no Menu Lateral
+st.sidebar.divider()
+st.sidebar.markdown(
+    """
+    <div style="text-align: center; color: #888888; font-size: 13px; margin-top: 20px;">
+        <p>Desenvolvido por <b>Waldir Neto</b></p>
+        <p>Idealizado por <b>Weverton Andrade</b></p>
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
+
 # Cabeçalho do Dashboard
 st.title("SUPPLY CHAIN ANALYTICS | Compras 360")
 st.markdown("Portal de inteligência de compras e suprimentos.")
 
-# NOVO: IA e Insights Automáticos
+# IA e Insights Automáticos
 if not df_filtrado.empty:
     with st.expander("🤖 Robô de Insights Automáticos (Clique para abrir)", expanded=True):
         col_ia1, col_ia2 = st.columns(2)
