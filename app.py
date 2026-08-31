@@ -93,7 +93,7 @@ st.sidebar.download_button(
     mime='text/csv'
 )
 
-# NOVO: Créditos no Menu Lateral
+# Créditos no Menu Lateral
 st.sidebar.divider()
 st.sidebar.markdown(
     """
@@ -109,6 +109,10 @@ st.sidebar.markdown(
 st.title("SUPPLY CHAIN ANALYTICS | Compras 360")
 st.markdown("Portal de inteligência de compras e suprimentos.")
 
+# Função auxiliar para formatar Reais
+def formatar_moeda(valor):
+    return f"R$ {valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+
 # IA e Insights Automáticos
 if not df_filtrado.empty:
     with st.expander("🤖 Robô de Insights Automáticos (Clique para abrir)", expanded=True):
@@ -117,7 +121,7 @@ if not df_filtrado.empty:
         with col_ia1:
             top_comprador = df_filtrado.groupby('COMPRADOR')['SAVING COMPRADOR'].sum().idxmax()
             top_saving = df_filtrado.groupby('COMPRADOR')['SAVING COMPRADOR'].sum().max()
-            st.success(f"💡 **Destaque de Economia:** O comprador(a) **{top_comprador}** gerou o maior saving desta seleção (R$ {top_saving:,.2f}).")
+            st.success(f"💡 **Destaque de Economia:** O comprador(a) **{top_comprador}** gerou a maior economia desta seleção ({formatar_moeda(top_saving)}).")
             
         with col_ia2:
             if 'CATEGORIA_PRAZO' in df_filtrado.columns:
@@ -138,7 +142,7 @@ total_requisicoes = df_filtrado['Nº REQUISIÇÃO'].nunique()
 total_fornecedores = df_filtrado['FORNECEDOR'].nunique()
 
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Saving Total", f"R$ {total_saving:,.2f}")
+col1.metric("Economia Total (Saving)", formatar_moeda(total_saving))
 col2.metric("Total de Pedidos", total_pedidos)
 col3.metric("Requisições", total_requisicoes)
 col4.metric("Fornecedores Ativos", total_fornecedores)
@@ -146,17 +150,35 @@ col4.metric("Fornecedores Ativos", total_fornecedores)
 st.divider()
 
 # AS TRÊS ABAS DO SISTEMA
-aba1, aba2, aba3 = st.tabs(["📊 Visão Geral", "⏱️ Análise de SLA e Prazos", "💰 Saving Intelligence"])
+aba1, aba2, aba3 = st.tabs(["📊 Visão Geral", "⏱️ Análise de SLA e Prazos", "💰 Inteligência de Economia"])
 
 with aba1:
     col_graf1, col_graf2 = st.columns(2)
     
     with col_graf1:
-        st.subheader("Saving por Comprador")
+        st.subheader("Economia Gerada por Comprador")
         df_comprador = df_filtrado.groupby("COMPRADOR")['SAVING COMPRADOR'].sum().reset_index()
         df_comprador = df_comprador.sort_values(by="SAVING COMPRADOR", ascending=False)
-        fig1 = px.bar(df_comprador, x="COMPRADOR", y="SAVING COMPRADOR", color_discrete_sequence=["#3B82F6"], text_auto=".2s")
+        
+        # Aplicando a formatação de moeda para os rótulos do gráfico
+        df_comprador['VALOR_FORMATADO'] = df_comprador['SAVING COMPRADOR'].apply(formatar_moeda)
+        
+        fig1 = px.bar(
+            df_comprador, 
+            x="COMPRADOR", 
+            y="SAVING COMPRADOR", 
+            text="VALOR_FORMATADO",
+            color_discrete_sequence=["#3B82F6"],
+            labels={"SAVING COMPRADOR": "Economia (R$)", "COMPRADOR": "Comprador"}
+        )
+        fig1.update_traces(textposition='outside')
         fig1.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+        
+        # Ajuste de margem para evitar que o texto do topo seja cortado
+        valor_maximo = df_comprador['SAVING COMPRADOR'].max()
+        if pd.notna(valor_maximo) and valor_maximo > 0:
+            fig1.update_yaxes(range=[0, valor_maximo * 1.2])
+            
         st.plotly_chart(fig1, use_container_width=True)
 
     with col_graf2:
@@ -195,20 +217,36 @@ with aba2:
             st.success("Excelente! Nenhum pedido em atraso encontrado.")
 
 with aba3:
-    st.subheader("Inteligência Financeira (Saving)")
+    st.subheader("Inteligência Financeira")
     col_sav1, col_sav2 = st.columns(2)
     
     with col_sav1:
-        st.markdown("### Saving por Setor")
+        st.markdown("### Economia por Setor")
         if 'SETOR' in df_filtrado.columns:
             df_setor = df_filtrado.groupby('SETOR')['SAVING COMPRADOR'].sum().reset_index()
             df_setor = df_setor.sort_values(by='SAVING COMPRADOR', ascending=True).tail(10)
-            fig4 = px.bar(df_setor, x='SAVING COMPRADOR', y='SETOR', orientation='h', color_discrete_sequence=["#10B981"], text_auto=".2s")
+            
+            df_setor['VALOR_FORMATADO'] = df_setor['SAVING COMPRADOR'].apply(formatar_moeda)
+            
+            fig4 = px.bar(
+                df_setor, x='SAVING COMPRADOR', y='SETOR', orientation='h', 
+                text='VALOR_FORMATADO', color_discrete_sequence=["#10B981"],
+                labels={"SAVING COMPRADOR": "Economia (R$)", "SETOR": "Setor"}
+            )
+            fig4.update_traces(textposition='outside')
             fig4.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+            
+            valor_max_setor = df_setor['SAVING COMPRADOR'].max()
+            if pd.notna(valor_max_setor) and valor_max_setor > 0:
+                fig4.update_xaxes(range=[0, valor_max_setor * 1.3])
+                
             st.plotly_chart(fig4, use_container_width=True)
             
     with col_sav2:
-        st.markdown("### Top Fornecedores por Saving")
+        st.markdown("### Top Fornecedores por Economia Gerada")
         df_forn_sav = df_filtrado.groupby('FORNECEDOR')['SAVING COMPRADOR'].sum().reset_index()
         df_forn_sav = df_forn_sav.sort_values(by='SAVING COMPRADOR', ascending=False).head(10)
-        st.dataframe(df_forn_sav.style.format({'SAVING COMPRADOR': 'R$ {:,.2f}'}), use_container_width=True, hide_index=True)
+        
+        # Renomeando a coluna na tabela para garantir a clareza
+        df_forn_sav = df_forn_sav.rename(columns={'SAVING COMPRADOR': 'ECONOMIA GERADA'})
+        st.dataframe(df_forn_sav.style.format({'ECONOMIA GERADA': 'R$ {:,.2f}'}), use_container_width=True, hide_index=True)
