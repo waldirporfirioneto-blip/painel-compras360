@@ -1,9 +1,28 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import os
 
 # 1. Configuração da Página
 st.set_page_config(page_title="Compras 360", layout="wide", page_icon="📊")
+st.markdown(
+    """
+    <style>
+    /* Esconde o ícone de 'olho' nativo do navegador (Edge/Chrome) para não duplicar com o do Streamlit */
+    input[type="password"]::-ms-reveal,
+    input[type="password"]::-ms-clear {
+        display: none;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+# Identidade Visual
+if os.path.exists("logo.png"):
+    st.sidebar.image("logo.png", use_container_width=True)
+else:
+    st.sidebar.markdown("<h2 style='text-align: center; color: #10B981;'>🏢 GREE ELECTRIC</h2>", unsafe_allow_html=True)
+    st.sidebar.caption("<p style='text-align: center;'>Coloque uma imagem chamada 'logo.png' na pasta para substituí-la.</p>", unsafe_allow_html=True)
 
 # Segurança
 st.sidebar.title("🔒 Acesso Restrito")
@@ -58,36 +77,62 @@ def carregar_dados(arquivo):
 
 df = carregar_dados(arquivo_upload)
 
-# Filtros Temporais
-st.sidebar.divider()
-st.sidebar.title("⚙️ Filtros da Operação")
-
-anos_unicos = df['ANO'].dropna().unique().tolist()
-anos_unicos = sorted(anos_unicos, reverse=True)
-anos_selecionados = st.sidebar.multiselect("📅 Selecione o Ano:", options=anos_unicos, default=anos_unicos)
-
+# Configurando as opções únicas para os filtros
+anos_unicos = sorted(df['ANO'].dropna().unique().tolist(), reverse=True)
 meses_unicos = df['MÊS REFERENTE'].dropna().unique().tolist()
-meses_selecionados = st.sidebar.multiselect("📆 Selecione o Mês:", options=meses_unicos, default=meses_unicos)
-
 compradores_unicos = df['COMPRADOR'].dropna().unique().tolist()
-compradores_selecionados = st.sidebar.multiselect("👤 Selecione o Comprador:", options=compradores_unicos, default=compradores_unicos)
+setores_unicos = df['SETOR'].dropna().unique().tolist() if 'SETOR' in df.columns else []
+status_unicos = df['CATEGORIA_PRAZO'].dropna().unique().tolist() if 'CATEGORIA_PRAZO' in df.columns else []
 
-df_filtrado = df[
-    (df['ANO'].isin(anos_selecionados)) &
-    (df['MÊS REFERENTE'].isin(meses_selecionados)) &
-    (df['COMPRADOR'].isin(compradores_selecionados))
-]
+# Memória do sistema: agora os filtros começam vazios por padrão
+if 'filtro_ano' not in st.session_state: st.session_state['filtro_ano'] = []
+if 'filtro_mes' not in st.session_state: st.session_state['filtro_mes'] = []
+if 'filtro_comprador' not in st.session_state: st.session_state['filtro_comprador'] = []
+if 'filtro_setor' not in st.session_state: st.session_state['filtro_setor'] = []
+if 'filtro_status' not in st.session_state: st.session_state['filtro_status'] = []
+
+st.sidebar.divider()
+st.sidebar.title("Filtros da Operação")
+
+if st.sidebar.button("Limpar Todos os Filtros"):
+    st.session_state['filtro_ano'] = []
+    st.session_state['filtro_mes'] = []
+    st.session_state['filtro_comprador'] = []
+    st.session_state['filtro_setor'] = []
+    st.session_state['filtro_status'] = []
+    st.rerun()
+
+# Filtros Estratégicos (as caixas ficam vazias por padrão)
+anos_selecionados = st.sidebar.multiselect("Ano:", options=anos_unicos, key='filtro_ano')
+meses_selecionados = st.sidebar.multiselect("Mês:", options=meses_unicos, key='filtro_mes')
+setores_selecionados = st.sidebar.multiselect("Setor:", options=setores_unicos, key='filtro_setor')
+compradores_selecionados = st.sidebar.multiselect("Comprador:", options=compradores_unicos, key='filtro_comprador')
+status_selecionados = st.sidebar.multiselect("Status do Prazo:", options=status_unicos, key='filtro_status')
+
+# Nova Lógica de Filtragem: Se a caixa estiver vazia, não aplica o filtro
+df_filtrado = df.copy()
+
+if anos_selecionados:
+    df_filtrado = df_filtrado[df_filtrado['ANO'].isin(anos_selecionados)]
+if meses_selecionados:
+    df_filtrado = df_filtrado[df_filtrado['MÊS REFERENTE'].isin(meses_selecionados)]
+if compradores_selecionados:
+    df_filtrado = df_filtrado[df_filtrado['COMPRADOR'].isin(compradores_selecionados)]
+if setores_selecionados:
+    df_filtrado = df_filtrado[df_filtrado['SETOR'].isin(setores_selecionados)]
+if status_selecionados:
+    df_filtrado = df_filtrado[df_filtrado['CATEGORIA_PRAZO'].isin(status_selecionados)]
 
 # Botão de Exportação
 st.sidebar.divider()
-st.sidebar.title("📥 Exportar Relatório")
+st.sidebar.title("Exportar Relatório")
 @st.cache_data
-def converter_df(df):
-    return df.to_csv(index=False, sep=';', decimal=',').encode('utf-8-sig')
+def converter_df(df_export):
+    return df_export.to_csv(index=False, sep=';', decimal=',').encode('utf-8-sig')
 
 csv_export = converter_df(df_filtrado)
 st.sidebar.download_button(
-    label="Baixar Dados Filtrados (Excel/CSV)",
+    label="Baixar Dados Filtrados",
     data=csv_export,
     file_name='relatorio_compras_filtrado.csv',
     mime='text/csv'
@@ -135,17 +180,24 @@ if not df_filtrado.empty:
 
 st.divider()
 
-# Cálculo de KPIs
+# KPIs
 total_saving = df_filtrado['SAVING COMPRADOR'].sum()
 total_pedidos = df_filtrado['Nº PEDIDO'].nunique()
-total_requisicoes = df_filtrado['Nº REQUISIÇÃO'].nunique()
 total_fornecedores = df_filtrado['FORNECEDOR'].nunique()
 
-col1, col2, col3, col4 = st.columns(4)
+taxa_sla = 0
+if not df_filtrado.empty:
+    df_sla_valido = df_filtrado[df_filtrado['CATEGORIA_PRAZO'] != 'Cancelado']
+    if not df_sla_valido.empty:
+        pedidos_no_prazo = len(df_sla_valido[df_sla_valido['CATEGORIA_PRAZO'].isin(['Finalizado', 'No Prazo'])])
+        taxa_sla = (pedidos_no_prazo / len(df_sla_valido)) * 100
+
+col1, col2, col3, col4, col5 = st.columns([1.8, 1.2, 1.1, 1.1, 1.1])
 col1.metric("Economia Total (Saving)", formatar_moeda(total_saving))
-col2.metric("Total de Pedidos", total_pedidos)
-col3.metric("Requisições", total_requisicoes)
-col4.metric("Fornecedores Ativos", total_fornecedores)
+col2.metric("🎯 Taxa de SLA (Sucesso)", f"{taxa_sla:.1f}%")
+col3.metric("Total de Pedidos", total_pedidos)
+col4.metric("Requisições", df_filtrado['Nº REQUISIÇÃO'].nunique())
+col5.metric("Fornecedores Ativos", total_fornecedores)
 
 st.divider()
 
@@ -160,21 +212,15 @@ with aba1:
         df_comprador = df_filtrado.groupby("COMPRADOR")['SAVING COMPRADOR'].sum().reset_index()
         df_comprador = df_comprador.sort_values(by="SAVING COMPRADOR", ascending=False)
         
-        # Aplicando a formatação de moeda para os rótulos do gráfico
         df_comprador['VALOR_FORMATADO'] = df_comprador['SAVING COMPRADOR'].apply(formatar_moeda)
         
         fig1 = px.bar(
-            df_comprador, 
-            x="COMPRADOR", 
-            y="SAVING COMPRADOR", 
-            text="VALOR_FORMATADO",
-            color_discrete_sequence=["#3B82F6"],
-            labels={"SAVING COMPRADOR": "Economia (R$)", "COMPRADOR": "Comprador"}
+            df_comprador, x="COMPRADOR", y="SAVING COMPRADOR", text="VALOR_FORMATADO",
+            color_discrete_sequence=["#3B82F6"], labels={"SAVING COMPRADOR": "Economia (R$)", "COMPRADOR": "Comprador"}
         )
         fig1.update_traces(textposition='outside')
         fig1.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
         
-        # Ajuste de margem para evitar que o texto do topo seja cortado
         valor_maximo = df_comprador['SAVING COMPRADOR'].max()
         if pd.notna(valor_maximo) and valor_maximo > 0:
             fig1.update_yaxes(range=[0, valor_maximo * 1.2])
@@ -247,6 +293,5 @@ with aba3:
         df_forn_sav = df_filtrado.groupby('FORNECEDOR')['SAVING COMPRADOR'].sum().reset_index()
         df_forn_sav = df_forn_sav.sort_values(by='SAVING COMPRADOR', ascending=False).head(10)
         
-        # Renomeando a coluna na tabela para garantir a clareza
         df_forn_sav = df_forn_sav.rename(columns={'SAVING COMPRADOR': 'ECONOMIA GERADA'})
         st.dataframe(df_forn_sav.style.format({'ECONOMIA GERADA': 'R$ {:,.2f}'}), use_container_width=True, hide_index=True)
