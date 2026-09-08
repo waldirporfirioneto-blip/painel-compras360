@@ -15,7 +15,6 @@ st.markdown(
     input[type="password"]::-ms-clear {
         display: none;
     }
-    /* Deixa as tabelas do Streamlit visualmente mais limpas */
     .stDataFrame { padding-top: 10px; }
     </style>
     """,
@@ -55,7 +54,6 @@ def carregar_dados(arquivo):
     if 'ANO' in df.columns:
         df['ANO'] = df['ANO'].fillna(0).astype(int).astype(str).replace('0', 'Não Informado')
         
-    # Lógica de Vencimento em Tempo Real
     if 'PRAZO RC' in df.columns and 'STATUS PRAZO' in df.columns:
         df['PRAZO RC'] = pd.to_datetime(df['PRAZO RC'], errors='coerce')
         hoje = pd.to_datetime(datetime.now().date())
@@ -155,6 +153,12 @@ st.markdown("Portal de inteligência de compras e acompanhamento de SLA.")
 def formatar_moeda(valor):
     return f"R$ {valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
 
+# Função para resumir valores no gráfico (ex: R$ 260K)
+def formatar_k(valor):
+    if valor >= 1000:
+        return f"R$ {valor/1000:.1f}K".replace(".", ",")
+    return f"R$ {valor:,.0f}".replace(",", ".")
+
 # IA e Insights Automáticos
 if not df_filtrado.empty:
     with st.expander("🤖 Robô de Insights Automáticos", expanded=True):
@@ -203,57 +207,60 @@ col5.metric("Fornecedores Ativos", total_fornecedores)
 st.divider()
 
 # ABAS DO SISTEMA
-aba1, aba2, aba3 = st.tabs(["💰 Economia & Metas", "⏱️ Painel de Vencimentos & Cobrança", "⭐ Avaliação de Fornecedores"])
+aba1, aba2, aba3 = st.tabs(["💰 Economia & Metas", "⏱️ Vencimentos & Cobrança", "⭐ Avaliação de Fornecedores"])
 
+# --- ABA 1: NOVO LAYOUT VERTICAL E EM CASCATA ---
 with aba1:
-    st.subheader("Performance Financeira da Equipe")
-    # Ajuste de Proporção: Gráfico ganha mais espaço (1.6) e tabela um pouco menos (1.0)
-    col_eco1, col_eco2 = st.columns([1.6, 1.0])
+    st.subheader("Economia Total por Comprador")
     
-    with col_eco1:
-        st.markdown("### Economia Total por Comprador")
-        df_comprador = df_filtrado.groupby("COMPRADOR")['SAVING COMPRADOR'].sum().reset_index()
-        # Ordenado crescente para o Plotly mostrar o maior no topo
-        df_comprador = df_comprador.sort_values(by="SAVING COMPRADOR", ascending=True) 
-        df_comprador['VALOR_FORMATADO'] = df_comprador['SAVING COMPRADOR'].apply(formatar_moeda)
-        
-        # --- MELHORIA DE DESIGN: Gráfico Horizontal, fontes maiores e eixo limpo ---
-        fig1 = px.bar(
-            df_comprador, x="SAVING COMPRADOR", y="COMPRADOR", orientation='h', text="VALOR_FORMATADO",
-            color_discrete_sequence=["#10B981"], height=450
-        )
-        fig1.update_traces(textposition='outside', textfont_size=13)
-        fig1.update_layout(
-            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-            xaxis=dict(showgrid=False, showticklabels=False, title=""), # Remove o eixo X poluído
-            yaxis=dict(title="", tickfont_size=12), margin=dict(l=0, r=0, t=10, b=0)
-        )
-        # Expande o gráfico um pouco para a direita para caber os valores textuais
-        if df_comprador['SAVING COMPRADOR'].max() > 0:
-            fig1.update_xaxes(range=[0, df_comprador['SAVING COMPRADOR'].max() * 1.3])
-            
-        st.plotly_chart(fig1, use_container_width=True)
-        
-    with col_eco2:
+    # 1. Gráfico no topo, ocupando toda a largura
+    df_comprador = df_filtrado.groupby("COMPRADOR")['SAVING COMPRADOR'].sum().reset_index()
+    df_comprador = df_comprador.sort_values(by="SAVING COMPRADOR", ascending=False)
+    
+    # Aplica a formatação limpa "K" para o gráfico
+    df_comprador['TEXTO_GRAFICO'] = df_comprador['SAVING COMPRADOR'].apply(formatar_k)
+    
+    fig1 = px.bar(
+        df_comprador, x="COMPRADOR", y="SAVING COMPRADOR", text="TEXTO_GRAFICO",
+        color_discrete_sequence=["#10B981"], height=350
+    )
+    fig1.update_traces(textposition='outside', textfont_size=12)
+    fig1.update_layout(
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+        yaxis=dict(showgrid=False, showticklabels=False, title=""), # Limpa o eixo Y
+        xaxis=dict(title="", tickfont_size=14, tickangle=0), # Texto na horizontal se couber
+        margin=dict(l=0, r=0, t=20, b=0)
+    )
+    if df_comprador['SAVING COMPRADOR'].max() > 0:
+        fig1.update_yaxes(range=[0, df_comprador['SAVING COMPRADOR'].max() * 1.2])
+    
+    st.plotly_chart(fig1, use_container_width=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True) # Espaço
+    
+    # 2. Tabelas lado a lado na parte de baixo
+    col_rank1, col_rank2 = st.columns(2)
+    
+    with col_rank1:
         st.markdown("### 🏆 Ranking: Metas Batidas (> R$ 5.000)")
         df_metas_rank = df_filtrado[df_filtrado['SAVING COMPRADOR'] >= 5000]
         if not df_metas_rank.empty:
             rank_compradores = df_metas_rank['COMPRADOR'].value_counts().reset_index()
             rank_compradores.columns = ['Comprador', 'Qtd Negociações']
-            # Tabela mais bonita usando config nativa
             st.dataframe(rank_compradores, use_container_width=True, hide_index=True)
         else:
-            st.info("Nenhuma negociação acima de R$ 5.000 na visão atual.")
+            st.info("Nenhuma negociação acima da meta.")
             
-        st.markdown("### 🔝 Top Fornecedores (Saving)")
+    with col_rank2:
+        st.markdown("### 🔝 Top Fornecedores (Economia Gerada)")
         df_forn_sav = df_filtrado.groupby('FORNECEDOR')['SAVING COMPRADOR'].sum().reset_index()
         df_forn_sav = df_forn_sav.sort_values(by='SAVING COMPRADOR', ascending=False).head(5)
-        st.dataframe(df_forn_sav.rename(columns={'SAVING COMPRADOR': 'Economia Gerada'}).style.format({'Economia Gerada': 'R$ {:,.2f}'}), use_container_width=True, hide_index=True)
+        st.dataframe(df_forn_sav.rename(columns={'SAVING COMPRADOR': 'Economia'}).style.format({'Economia': 'R$ {:,.2f}'}), use_container_width=True, hide_index=True)
 
+# --- ABA 2: VENCIMENTOS (Mantida e Melhorada) ---
 with aba2:
     st.subheader("Controle Dinâmico de Entregas e Ferramentas")
     
-    # --- MELHORIA DE FERRAMENTA: Gerador de Cobrança WhatsApp ---
     with st.container():
         st.markdown("### 💬 Assistente de Cobrança (WhatsApp)")
         df_atrasados_lista = df_filtrado[df_filtrado['CATEGORIA_PRAZO'] == 'Atrasado']
@@ -265,18 +272,16 @@ with aba2:
             
             with col_msg2:
                 dados_pedido = df_atrasados_lista[df_atrasados_lista['Nº PEDIDO'] == pedido_sel].iloc[0]
-                desc_item = dados_pedido.get('DESCRIÇÃO DO ITEM ', 'Material solicitado') # Busca segura
+                desc_item = dados_pedido.get('DESCRIÇÃO DO ITEM ', 'Material solicitado')
                 
-                mensagem = f"Olá, equipe da *{dados_pedido['FORNECEDOR']}*.\n\nConsta em nosso sistema de suprimentos que o Pedido *{pedido_sel}* ({desc_item}) encontra-se *{dados_pedido['DESCRICAO_VENCIMENTO']}*.\n\nGostaríamos de um posicionamento urgente sobre a previsão de entrega para não impactarmos nossa operação.\n\nFicamos no aguardo.\n*Equipe de Suprimentos - Gree Electric*"
-                
+                mensagem = f"Olá, equipe da *{dados_pedido['FORNECEDOR']}*.\n\nConsta em nosso sistema de suprimentos que o Pedido *{pedido_sel}* ({desc_item}) encontra-se *{dados_pedido['DESCRICAO_VENCIMENTO']}*.\n\nGostaríamos de um posicionamento urgente sobre a previsão de entrega.\n\n*Suprimentos - Gree Electric*"
                 st.code(mensagem, language="text")
-                st.caption("👆 Passe o mouse no canto direito do bloco acima para copiar o texto.")
         else:
             st.success("Não há pedidos atrasados para cobrar no momento. Ótimo trabalho!")
             
     st.divider()
 
-    col_ven1, col_ven2 = st.columns(2)
+    col_ven1, col_ven2 = st.columns([1.5, 2])
     with col_ven1:
         st.markdown("### Distribuição de Status")
         if 'CATEGORIA_PRAZO' in df_filtrado.columns:
@@ -284,69 +289,63 @@ with aba2:
             df_sla.columns = ['STATUS', 'QUANTIDADE']
             mapa_cores = {"Finalizado": "#10B981", "No Prazo": "#3B82F6", "Atrasado": "#EF4444", "Cancelado": "#64748B", "Outros": "#F59E0B"}
             fig3 = px.pie(df_sla, names='STATUS', values='QUANTIDADE', color='STATUS', hole=0.5, color_discrete_map=mapa_cores)
-            fig3.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", margin=dict(t=0, b=0))
+            fig3.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", margin=dict(t=0, b=0, l=0, r=0))
             st.plotly_chart(fig3, use_container_width=True)
             
     with col_ven2:
         st.markdown("### 🔴 Painel Crítico: Atrasados")
         if not df_atrasados_lista.empty:
-            st.dataframe(df_atrasados_lista[['Nº PEDIDO', 'FORNECEDOR', 'COMPRADOR', 'DESCRICAO_VENCIMENTO']], use_container_width=True, hide_index=True)
+            st.dataframe(df_atrasados_lista[['Nº PEDIDO', 'FORNECEDOR', 'COMPRADOR', 'DESCRICAO_VENCIMENTO']], use_container_width=True, hide_index=True, height=200)
         else:
-            st.info("Tabela vazia.")
+            st.info("Sem atrasos no momento.")
             
         st.markdown("### 🟡 Radar: Vencendo nos próximos 15 dias")
         if 'CATEGORIA_PRAZO' in df_filtrado.columns:
             df_radar = df_filtrado[df_filtrado['CATEGORIA_PRAZO'] == 'No Prazo'][['Nº PEDIDO', 'FORNECEDOR', 'COMPRADOR', 'DESCRICAO_VENCIMENTO']]
             df_radar = df_radar[df_radar['DESCRICAO_VENCIMENTO'].str.contains("Vence|Faltam", na=False)]
-            st.dataframe(df_radar, use_container_width=True, hide_index=True)
+            st.dataframe(df_radar, use_container_width=True, hide_index=True, height=200)
 
+# --- ABA 3: AVALIAÇÃO DE FORNECEDORES ---
 with aba3:
-    st.subheader("Mapeamento da Operação e Avaliação de Fornecedores")
+    st.subheader("Avaliação de Fornecedores e Demanda")
     
-    # --- MELHORIA DE NEGÓCIOS: Score de Confiabilidade do Fornecedor ---
-    st.markdown("### ⭐ Rating de Fornecedores (Score de Risco)")
-    st.markdown("Esta tabela cruza o volume de pedidos com as falhas de entrega para avaliar parceiros comerciais.")
-    
-    if not df_filtrado.empty:
-        # Conta total de pedidos por fornecedor
-        df_forn_total = df_filtrado.groupby('FORNECEDOR').size().reset_index(name='Total Pedidos')
-        # Conta atrasos por fornecedor
-        df_forn_atrasos = df_filtrado[df_filtrado['CATEGORIA_PRAZO'] == 'Atrasado'].groupby('FORNECEDOR').size().reset_index(name='Qtd Atrasos')
-        
-        # Junta os dados
-        df_score = pd.merge(df_forn_total, df_forn_atrasos, on='FORNECEDOR', how='left').fillna(0)
-        df_score['Taxa Falha'] = df_score['Qtd Atrasos'] / df_score['Total Pedidos']
-        
-        # Cria o Rating
-        def gerar_nota(linha):
-            if linha['Taxa Falha'] == 0: return "A ⭐⭐⭐ (Excelente)"
-            elif linha['Taxa Falha'] <= 0.2: return "B ⭐⭐ (Bom)"
-            elif linha['Taxa Falha'] <= 0.5: return "C ⭐ (Atenção)"
-            else: return "D ⚠️ (Crítico)"
-            
-        df_score['Classificação'] = df_score.apply(gerar_nota, axis=1)
-        # Ordena para focar nos que tem mais volume primeiro
-        df_score = df_score.sort_values(by=['Total Pedidos', 'Taxa Falha'], ascending=[False, True])
-        
-        st.dataframe(
-            df_score[['FORNECEDOR', 'Classificação', 'Total Pedidos', 'Qtd Atrasos']], 
-            use_container_width=True, 
-            hide_index=True
-        )
-    
-    st.divider()
-    
-    col_op1, col_op2 = st.columns(2)
+    col_op1, col_op2 = st.columns([1.2, 1.8])
     with col_op1:
-        st.markdown("### Demanda por Setor Solicitante")
+        st.markdown("### 🏭 Demanda por Setor")
         if 'SETOR' in df_filtrado.columns:
             df_setor_vol = df_filtrado['SETOR'].value_counts().reset_index().head(10)
             df_setor_vol.columns = ['SETOR', 'REQUISIÇÕES']
+            # Gráfico de barras horizontal mais limpo
             fig_setor = px.bar(df_setor_vol, x='REQUISIÇÕES', y='SETOR', orientation='h', color_discrete_sequence=["#8B5CF6"])
-            fig_setor.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis=dict(autorange="reversed"))
+            fig_setor.update_layout(
+                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", 
+                yaxis=dict(autorange="reversed", title=""),
+                xaxis=dict(title="", showgrid=False)
+            )
             st.plotly_chart(fig_setor, use_container_width=True)
             
     with col_op2:
-        st.markdown("### Tabela Operacional Visão Geral")
-        colunas_exibicao = ['Nº PEDIDO', 'COMPRADOR', 'FORNECEDOR', 'SETOR', 'STATUS PRAZO']
-        st.dataframe(df_filtrado[colunas_exibicao].head(100), use_container_width=True)
+        st.markdown("### ⭐ Score de Risco de Fornecedores")
+        st.markdown("Cruza volume total de pedidos com falhas de entrega.")
+        if not df_filtrado.empty:
+            df_forn_total = df_filtrado.groupby('FORNECEDOR').size().reset_index(name='Total Pedidos')
+            df_forn_atrasos = df_filtrado[df_filtrado['CATEGORIA_PRAZO'] == 'Atrasado'].groupby('FORNECEDOR').size().reset_index(name='Qtd Atrasos')
+            
+            df_score = pd.merge(df_forn_total, df_forn_atrasos, on='FORNECEDOR', how='left').fillna(0)
+            df_score['Taxa Falha'] = df_score['Qtd Atrasos'] / df_score['Total Pedidos']
+            
+            def gerar_nota(linha):
+                if linha['Taxa Falha'] == 0: return "A ⭐⭐⭐"
+                elif linha['Taxa Falha'] <= 0.2: return "B ⭐⭐"
+                elif linha['Taxa Falha'] <= 0.5: return "C ⭐"
+                else: return "D ⚠️"
+                
+            df_score['Classificação'] = df_score.apply(gerar_nota, axis=1)
+            df_score = df_score.sort_values(by=['Total Pedidos', 'Taxa Falha'], ascending=[False, True]).head(15)
+            
+            st.dataframe(
+                df_score[['FORNECEDOR', 'Classificação', 'Total Pedidos', 'Qtd Atrasos']], 
+                use_container_width=True, 
+                hide_index=True,
+                height=350
+            )
