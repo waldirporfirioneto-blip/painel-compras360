@@ -313,18 +313,32 @@ with aba1:
     # 3. Tabelas lado a lado na parte de baixo
     col_rank1, col_rank2 = st.columns(2)
     
-    with col_rank1:
-        st.markdown("### 🏆 Ranking: Metas Batidas (> R$ 5.000)")
+   with col_rank1:
+        st.markdown("Ranking: Metas Batidas (R$ 5.000)")
         df_metas_rank = df_filtrado[df_filtrado['SAVING COMPRADOR'] >= 5000]
+        
         if not df_metas_rank.empty:
-            rank_compradores = df_metas_rank['COMPRADOR'].value_counts().reset_index()
-            rank_compradores.columns = ['Comprador', 'Qtd Negociações']
+            # Agrupa contando a quantidade de metas batidas e somando o valor gerado nelas
+            rank_compradores = df_metas_rank.groupby('COMPRADOR').agg(
+                Qtd_Negociacoes=('SAVING COMPRADOR', 'count'),
+                Saving_Total=('SAVING COMPRADOR', 'sum')
+            ).reset_index()
+            
+            # Renomeia as colunas para a tabela ficar intuitiva
+            rank_compradores.columns = ['Comprador', 'Qtd Negociações', 'Saving Total']
+            
+            # Ordena o pódio: 1º Quem bateu mais metas e 2º Quem trouxe mais dinheiro no desempate
+            rank_compradores = rank_compradores.sort_values(by=['Qtd Negociações', 'Saving Total'], ascending=[False, False])
+            
+            # Aplica a nossa função para formatar os valores direitinho (R$ 00,00)
+            rank_compradores['Saving Total'] = rank_compradores['Saving Total'].apply(formatar_moeda)
+            
             st.dataframe(rank_compradores, width='stretch', hide_index=True)
         else:
             st.info("Nenhuma negociação acima da meta.")
             
     with col_rank2:
-        st.markdown("### 🔝 Top Fornecedores (Economia Gerada)")
+        st.markdown("Top Fornecedores (Economia Gerada)")
         df_forn_sav = df_filtrado.groupby('FORNECEDOR')['SAVING COMPRADOR'].sum().reset_index()
         df_forn_sav = df_forn_sav.sort_values(by='SAVING COMPRADOR', ascending=False).head(5)
         st.dataframe(df_forn_sav.rename(columns={'SAVING COMPRADOR': 'Economia'}).style.format({'Economia': 'R$ {:,.2f}'}), width='stretch', hide_index=True)
