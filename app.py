@@ -410,7 +410,7 @@ with aba3:
     st.subheader("Avaliação de Fornecedores e Demanda")
     
     # 1. Gráfico de Demanda ocupando toda a parte superior (Eixo Horizontal)
-    st.markdown("### 🏭 Demanda por Setor")
+    st.markdown("Demanda por Setor")
     if 'SETOR' in df_filtrado.columns:
         df_setor_vol = df_filtrado['SETOR'].value_counts().reset_index().head(10)
         df_setor_vol.columns = ['SETOR', 'REQUISIÇÕES']
