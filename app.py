@@ -311,9 +311,9 @@ with aba1:
         st.markdown("<br>", unsafe_allow_html=True)
 
     # 3. Tabelas lado a lado na parte de baixo
-    col_rank1, col_rank2 = st.columns(2)
+    col_rank1, col_rank2 = st.columns(2)    
     
-   with col_rank1:
+    with col_rank1:
         st.markdown("### 🏆 Ranking: Metas Batidas (> R$ 5.000)")
         df_metas_rank = df_filtrado[df_filtrado['SAVING COMPRADOR'] >= 5000]
         
