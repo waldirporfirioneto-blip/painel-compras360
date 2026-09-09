@@ -111,11 +111,11 @@ if st.sidebar.button("🧹 Limpar Todos os Filtros"):
         st.session_state[key] = []
     st.rerun()
 
-anos_selecionados = st.sidebar.multiselect("📅 Ano:", options=anos_unicos, key='filtro_ano')
-meses_selecionados = st.sidebar.multiselect("📆 Mês:", options=meses_unicos, key='filtro_mes')
-setores_selecionados = st.sidebar.multiselect("🏭 Setor:", options=setores_unicos, key='filtro_setor')
-compradores_selecionados = st.sidebar.multiselect("👤 Comprador:", options=compradores_unicos, key='filtro_comprador')
-status_selecionados = st.sidebar.multiselect("⏱️ Status do Prazo:", options=status_unicos, key='filtro_status')
+anos_selecionados = st.sidebar.multiselect("Ano:", options=anos_unicos, key='filtro_ano')
+meses_selecionados = st.sidebar.multiselect("Mês:", options=meses_unicos, key='filtro_mes')
+setores_selecionados = st.sidebar.multiselect("Setor:", options=setores_unicos, key='filtro_setor')
+compradores_selecionados = st.sidebar.multiselect("Comprador:", options=compradores_unicos, key='filtro_comprador')
+status_selecionados = st.sidebar.multiselect("Status do Prazo:", options=status_unicos, key='filtro_status')
 
 df_filtrado = df.copy()
 if anos_selecionados: df_filtrado = df_filtrado[df_filtrado['ANO'].isin(anos_selecionados)]
@@ -314,7 +314,7 @@ with aba1:
     col_rank1, col_rank2 = st.columns(2)    
     
     with col_rank1:
-        st.markdown("### 🏆 Ranking: Metas Batidas (> R$ 5.000)")
+        st.markdown("Ranking: Metas Batidas (R$ 5.000)")
         df_metas_rank = df_filtrado[df_filtrado['SAVING COMPRADOR'] >= 5000]
         
         if not df_metas_rank.empty:
@@ -348,7 +348,7 @@ with aba2:
     st.subheader("Controle Dinâmico de Entregas e Ferramentas")
     
     with st.container():
-        st.markdown("### 💬 Assistente de Cobrança (WhatsApp)")
+        st.markdown("Assistente de Cobrança (WhatsApp)")
         df_atrasados_lista = df_filtrado[df_filtrado['CATEGORIA_PRAZO'] == 'Atrasado'].copy()
         
         if not df_atrasados_lista.empty:
