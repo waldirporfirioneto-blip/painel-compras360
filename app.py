@@ -213,16 +213,27 @@ with aba1:
     df_comprador = df_filtrado.groupby("COMPRADOR")['SAVING COMPRADOR'].sum().reset_index()
     df_comprador = df_comprador.sort_values(by="SAVING COMPRADOR", ascending=False)
     
-    # Aplicando a formatação completa (Integra) para mostrar os valores Reais (sem o "K")
-    df_comprador['TEXTO_GRAFICO'] = df_comprador['SAVING COMPRADOR'].apply(formatar_moeda)
-    
-    fig1 = px.bar(
-        df_comprador, x="COMPRADOR", y="SAVING COMPRADOR", text="TEXTO_GRAFICO",
-        color_discrete_sequence=["#10B981"], height=400
+    # Criamos a formatação real na força bruta direto no dataframe
+    df_comprador['VALOR_REAL'] = df_comprador['SAVING COMPRADOR'].apply(
+        lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     )
     
-    # CORREÇÃO DO "K": O texttemplate='%{text}' obriga o Plotly a usar a nossa formatação!
-    fig1.update_traces(texttemplate='%{text}', textposition='outside', textfont_size=12)
+    fig1 = px.bar(
+        df_comprador, 
+        x="COMPRADOR", 
+        y="SAVING COMPRADOR", 
+        text="VALOR_REAL", # Passa o texto formatado
+        color_discrete_sequence=["#10B981"], 
+        height=400
+    )
+    
+    # AQUI ESTÁ A MÁGICA PARA MATAR O "K": texttemplate="%{text}" força o Plotly a usar a nossa string literal
+    fig1.update_traces(
+        texttemplate='%{text}', 
+        textposition='outside', 
+        textfont_size=12,
+        hovertemplate="Comprador: %{x}<br>Economia: %{text}<extra></extra>"
+    )
     
     fig1.update_layout(
         plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
@@ -238,38 +249,45 @@ with aba1:
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # 2. NOVO: Gráfico de Evolução por Mês - CORRIGIDO
+    # 2. Gráfico de Evolução por Mês - CORRIGIDO (Zero "K" e Eixo Forçado)
     st.markdown("---")
     st.subheader("📈 Evolução de Saving por Mês")
     
     if 'MÊS REFERENTE' in df_filtrado.columns:
-        # Tratamento de segurança contra células vazias nos meses
         df_meses = df_filtrado.copy()
         df_meses['MÊS REFERENTE'] = df_meses['MÊS REFERENTE'].fillna('Não Informado').astype(str)
         
         df_evolucao = df_meses.groupby('MÊS REFERENTE')['SAVING COMPRADOR'].sum().reset_index()
+        df_evolucao = df_evolucao.sort_values('MÊS REFERENTE')
         
-        # Cria um texto para cada ponto do gráfico de linha
-        df_evolucao['TEXTO_EVOLUCAO'] = df_evolucao['SAVING COMPRADOR'].apply(formatar_moeda)
+        df_evolucao['VALOR_REAL'] = df_evolucao['SAVING COMPRADOR'].apply(
+            lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        )
 
         fig_linha = px.line(
             df_evolucao, 
             x="MÊS REFERENTE", 
             y="SAVING COMPRADOR", 
-            text="TEXTO_EVOLUCAO", # Isso garante que o valor apareça mesmo se houver só 1 mês
+            text="VALOR_REAL",
             markers=True,
             color_discrete_sequence=["#10B981"]
         )
         
-        fig_linha.update_traces(textposition="top center")
+        fig_linha.update_traces(
+            textposition="top center",
+            hovertemplate="Mês: %{x}<br>Economia: %{text}<extra></extra>"
+        )
         
         fig_linha.update_layout(
             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-            yaxis=dict(title="Valor Economizado (R$)", showgrid=True, gridcolor='rgba(255,255,255,0.1)'),
-            # CORREÇÃO DO EIXO X: Força o Plotly a entender que são Nomes (Categorias) e não Números (-1, 0, 1)
+            # tickformat=".0f" proíbe o Plotly de usar o "k" (Ex: 150000 em vez de 150k)
+            yaxis=dict(title="Valor Economizado (R$)", showgrid=True, gridcolor='rgba(255,255,255,0.1)', tickformat=".0f"),
             xaxis=dict(title="", type='category'), 
             hovermode="x unified"
         )
+        
+        # Margem superior para o texto da linha não cortar
+        fig_linha.update_yaxes(range=[0, df_evolucao['SAVING COMPRADOR'].max() * 1.25])
         
         st.plotly_chart(fig_linha, width='stretch')
         st.markdown("<br>", unsafe_allow_html=True)
