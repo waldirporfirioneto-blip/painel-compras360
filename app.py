@@ -23,7 +23,7 @@ st.markdown(
 
 # Identidade Visual
 if os.path.exists("logo.png"):
-    st.sidebar.image("logo.png", use_container_width=True)
+    st.sidebar.image("logo.png", width=250)
 else:
     st.sidebar.markdown("<h2 style='text-align: center; color: #10B981;'>🏢 GREE ELECTRIC</h2>", unsafe_allow_html=True)
 
@@ -46,46 +46,54 @@ def carregar_dados(arquivo):
     if arquivo is not None:
         df = pd.read_excel(arquivo, sheet_name="Dados")
     else:
-        df = pd.read_excel("COMPRADOR.xlsx", sheet_name="Dados")
-        
-    df['SAVING COMPRADOR'] = pd.to_numeric(df['SAVING COMPRADOR'], errors='coerce').fillna(0)
-    df['Nº PEDIDO'] = df['Nº PEDIDO'].astype(str)
-    
-    if 'ANO' in df.columns:
-        df['ANO'] = df['ANO'].fillna(0).astype(int).astype(str).replace('0', 'Não Informado')
-        
-    if 'PRAZO RC' in df.columns and 'STATUS PRAZO' in df.columns:
-        df['PRAZO RC'] = pd.to_datetime(df['PRAZO RC'], errors='coerce')
-        hoje = pd.to_datetime(datetime.now().date())
-        
-        def analisar_prazo_real(row):
-            status = str(row['STATUS PRAZO']).strip().upper()
-            data_prazo = row['PRAZO RC']
+        try:
+            df = pd.read_excel("COMPRADOR.xlsx", sheet_name="Dados")
+        except:
+            df = pd.DataFrame() # Previne erro se o arquivo não existir
             
-            if "FINALIZADO" in status: return "Finalizado", "Entregue"
-            elif "CANCELADO" in status: return "Cancelado", "Cancelado"
-            elif pd.isna(data_prazo): return "Outros", "Sem Data"
-            else:
-                diferenca_dias = (data_prazo - hoje).days
-                if diferenca_dias < 0: return "Atrasado", f"Vencido há {abs(diferenca_dias)} dias"
-                elif diferenca_dias == 0: return "No Prazo", "Vence Hoje!"
-                else: return "No Prazo", f"Faltam {diferenca_dias} dias"
-                    
-        resultado = df.apply(analisar_prazo_real, axis=1)
-        df['CATEGORIA_PRAZO'] = [res[0] for res in resultado]
-        df['DESCRICAO_VENCIMENTO'] = [res[1] for res in resultado]
-    else:
-        df['CATEGORIA_PRAZO'] = "Outros"
-        df['DESCRICAO_VENCIMENTO'] = "Sem Dados de Data"
+    if not df.empty:
+        df['SAVING COMPRADOR'] = pd.to_numeric(df['SAVING COMPRADOR'], errors='coerce').fillna(0)
+        df['Nº PEDIDO'] = df['Nº PEDIDO'].astype(str)
         
+        if 'ANO' in df.columns:
+            df['ANO'] = df['ANO'].fillna(0).astype(int).astype(str).replace('0', 'Não Informado')
+            
+        if 'PRAZO RC' in df.columns and 'STATUS PRAZO' in df.columns:
+            df['PRAZO RC'] = pd.to_datetime(df['PRAZO RC'], errors='coerce')
+            hoje = pd.to_datetime(datetime.now().date())
+            
+            def analisar_prazo_real(row):
+                status = str(row['STATUS PRAZO']).strip().upper()
+                data_prazo = row['PRAZO RC']
+                
+                if "FINALIZADO" in status: return "Finalizado", "Entregue"
+                elif "CANCELADO" in status: return "Cancelado", "Cancelado"
+                elif pd.isna(data_prazo): return "Outros", "Sem Data"
+                else:
+                    diferenca_dias = (data_prazo - hoje).days
+                    if diferenca_dias < 0: return "Atrasado", f"Vencido há {abs(diferenca_dias)} dias"
+                    elif diferenca_dias == 0: return "No Prazo", "Vence Hoje!"
+                    else: return "No Prazo", f"Faltam {diferenca_dias} dias"
+                        
+            resultado = df.apply(analisar_prazo_real, axis=1)
+            df['CATEGORIA_PRAZO'] = [res[0] for res in resultado]
+            df['DESCRICAO_VENCIMENTO'] = [res[1] for res in resultado]
+        else:
+            df['CATEGORIA_PRAZO'] = "Outros"
+            df['DESCRICAO_VENCIMENTO'] = "Sem Dados de Data"
+            
     return df
 
 df = carregar_dados(arquivo_upload)
 
+if df.empty:
+    st.error("Não foi possível carregar os dados. Verifique a planilha.")
+    st.stop()
+
 # Configurando Filtros
-anos_unicos = sorted(df['ANO'].dropna().unique().tolist(), reverse=True)
-meses_unicos = df['MÊS REFERENTE'].dropna().unique().tolist()
-compradores_unicos = df['COMPRADOR'].dropna().unique().tolist()
+anos_unicos = sorted(df['ANO'].dropna().unique().tolist(), reverse=True) if 'ANO' in df.columns else []
+meses_unicos = df['MÊS REFERENTE'].dropna().unique().tolist() if 'MÊS REFERENTE' in df.columns else []
+compradores_unicos = df['COMPRADOR'].dropna().unique().tolist() if 'COMPRADOR' in df.columns else []
 setores_unicos = df['SETOR'].dropna().unique().tolist() if 'SETOR' in df.columns else []
 status_unicos = df['CATEGORIA_PRAZO'].dropna().unique().tolist() if 'CATEGORIA_PRAZO' in df.columns else []
 
@@ -135,64 +143,23 @@ st.sidebar.download_button(
     mime='text/csv'
 )
 
-# Créditos
-st.sidebar.divider()
-st.sidebar.markdown(
-    """
-    <div style="text-align: center; color: #888888; font-size: 13px; margin-top: 20px;">
-        <p>Desenvolvido por <b>Waldir Neto</b></p>
-        <p>Idealizado por <b>Weverton Andrade</b></p>
-    </div>
-    """, unsafe_allow_html=True
-)
-
 # Cabeçalho Principal
 st.title("SUPPLY CHAIN ANALYTICS | Compras 360")
 st.markdown("Portal de inteligência de compras e acompanhamento de SLA.")
 
+# Função ATUALIZADA: Sem letras "K", mostrando o valor completo.
 def formatar_moeda(valor):
     return f"R$ {valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
-
-# Função para resumir valores no gráfico (ex: R$ 260K)
-def formatar_k(valor):
-    if valor >= 1000:
-        return f"R$ {valor/1000:.1f}K".replace(".", ",")
-    return f"R$ {valor:,.0f}".replace(",", ".")
-
-# IA e Insights Automáticos
-if not df_filtrado.empty:
-    with st.expander("🤖 Robô de Insights Automáticos", expanded=True):
-        col_ia1, col_ia2, col_ia3 = st.columns(3)
-        with col_ia1:
-            top_comprador = df_filtrado.groupby('COMPRADOR')['SAVING COMPRADOR'].sum().idxmax()
-            top_saving = df_filtrado.groupby('COMPRADOR')['SAVING COMPRADOR'].sum().max()
-            st.success(f"🏆 **Líder de Economia:** {top_comprador} ({formatar_moeda(top_saving)}).")
-        with col_ia2:
-            df_metas = df_filtrado[df_filtrado['SAVING COMPRADOR'] >= 5000]
-            if not df_metas.empty:
-                campeao_metas = df_metas['COMPRADOR'].value_counts().idxmax()
-                qtd_metas = df_metas['COMPRADOR'].value_counts().max()
-                st.info(f"🎯 **Metas Batidas (>R$ 5K):** {campeao_metas} lidera com {qtd_metas} hits.")
-            else:
-                st.info("🎯 Nenhuma compra acima da meta nesta seleção.")
-        with col_ia3:
-            df_atrasos_ia = df_filtrado[df_filtrado['CATEGORIA_PRAZO'] == 'Atrasado']
-            if not df_atrasos_ia.empty:
-                pior_fornecedor = df_atrasos_ia['FORNECEDOR'].value_counts().idxmax()
-                qtd_atraso = df_atrasos_ia['FORNECEDOR'].value_counts().max()
-                st.error(f"⚠️ **Risco:** Fornecedor '{pior_fornecedor}' possui {qtd_atraso} pedidos atrasados.")
-            else:
-                st.success("✅ Nenhum fornecedor em atraso nesta seleção.")
 
 st.divider()
 
 # KPIs Superiores - NOVO LAYOUT (CARDS)
-total_saving = df_filtrado['SAVING COMPRADOR'].sum()
-total_pedidos = df_filtrado['Nº PEDIDO'].nunique()
-total_fornecedores = df_filtrado['FORNECEDOR'].nunique()
+total_saving = df_filtrado['SAVING COMPRADOR'].sum() if 'SAVING COMPRADOR' in df_filtrado.columns else 0
+total_pedidos = df_filtrado['Nº PEDIDO'].nunique() if 'Nº PEDIDO' in df_filtrado.columns else 0
+total_fornecedores = df_filtrado['FORNECEDOR'].nunique() if 'FORNECEDOR' in df_filtrado.columns else 0
 taxa_sla = 0
 
-if not df_filtrado.empty:
+if not df_filtrado.empty and 'CATEGORIA_PRAZO' in df_filtrado.columns:
     df_sla_valido = df_filtrado[df_filtrado['CATEGORIA_PRAZO'] != 'Cancelado']
     if not df_sla_valido.empty:
         pedidos_no_prazo = len(df_sla_valido[df_sla_valido['CATEGORIA_PRAZO'].isin(['Finalizado', 'No Prazo'])])
@@ -238,7 +205,7 @@ st.divider()
 # ABAS DO SISTEMA
 aba1, aba2, aba3 = st.tabs(["💰 Economia & Metas", "⏱️ Vencimentos & Cobrança", "⭐ Avaliação de Fornecedores"])
 
-# --- ABA 1: NOVO LAYOUT VERTICAL E EM CASCATA ---
+# --- ABA 1: ECONOMIA ---
 with aba1:
     st.subheader("Economia Total por Comprador")
     
@@ -246,38 +213,36 @@ with aba1:
     df_comprador = df_filtrado.groupby("COMPRADOR")['SAVING COMPRADOR'].sum().reset_index()
     df_comprador = df_comprador.sort_values(by="SAVING COMPRADOR", ascending=False)
     
-    # Aplica a formatação limpa "K" para o gráfico
-    df_comprador['TEXTO_GRAFICO'] = df_comprador['SAVING COMPRADOR'].apply(formatar_k)
+    # Aplicando a formatação completa (Integra) para mostrar os valores Reais (sem o "K")
+    df_comprador['TEXTO_GRAFICO'] = df_comprador['SAVING COMPRADOR'].apply(formatar_moeda)
     
     fig1 = px.bar(
         df_comprador, x="COMPRADOR", y="SAVING COMPRADOR", text="TEXTO_GRAFICO",
-        color_discrete_sequence=["#10B981"], height=350
+        color_discrete_sequence=["#10B981"], height=400
     )
     fig1.update_traces(textposition='outside', textfont_size=12)
     fig1.update_layout(
         plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-        yaxis=dict(showgrid=False, showticklabels=False, title=""), # Limpa o eixo Y
-        xaxis=dict(title="", tickfont_size=14, tickangle=0), # Texto na horizontal se couber
-        margin=dict(l=0, r=0, t=20, b=0)
+        yaxis=dict(showgrid=False, showticklabels=False, title=""),
+        xaxis=dict(title="", tickfont_size=14, tickangle=0),
+        margin=dict(l=0, r=0, t=30, b=0)
     )
     if df_comprador['SAVING COMPRADOR'].max() > 0:
-        fig1.update_yaxes(range=[0, df_comprador['SAVING COMPRADOR'].max() * 1.2])
+        fig1.update_yaxes(range=[0, df_comprador['SAVING COMPRADOR'].max() * 1.15])
     
     st.plotly_chart(fig1, use_container_width=True)
     
-    st.markdown("<br>", unsafe_allow_html=True) # Espaço
+    st.markdown("<br>", unsafe_allow_html=True)
     
-    # NOVO: Gráfico de Evolução por Mês
+    # NOVO: Gráfico de Evolução por Mês - CORRIGIDO
     st.markdown("---")
     st.subheader("📈 Evolução de Saving por Mês")
     
     if 'MÊS REFERENTE' in df_filtrado.columns:
-        # Agrupando os dados por mês
         df_evolucao = df_filtrado.groupby('MÊS REFERENTE')['SAVING COMPRADOR'].sum().reset_index()
         
-        # Ordenação dos meses
-        ordem_meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
-        df_evolucao['MÊS REFERENTE'] = pd.Categorical(df_evolucao['MÊS REFERENTE'], categories=ordem_meses, ordered=True)
+        # Correção: Removemos a trava categórica (que causava o erro "Categorical warning" e zerava o gráfico).
+        # Agora ele simplesmente lê o mês como ele estiver escrito na planilha e ordena naturalmente.
         df_evolucao = df_evolucao.sort_values('MÊS REFERENTE')
 
         fig_linha = px.line(
@@ -297,7 +262,7 @@ with aba1:
         st.plotly_chart(fig_linha, use_container_width=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
-    # 2. Tabelas lado a lado na parte de baixo
+    # 2. Tabelas lado a lado na parte de baixo (Atualizadas para o novo padrão Streamlit)
     col_rank1, col_rank2 = st.columns(2)
     
     with col_rank1:
@@ -306,7 +271,7 @@ with aba1:
         if not df_metas_rank.empty:
             rank_compradores = df_metas_rank['COMPRADOR'].value_counts().reset_index()
             rank_compradores.columns = ['Comprador', 'Qtd Negociações']
-            st.dataframe(rank_compradores, use_container_width=True, hide_index=True)
+            st.dataframe(rank_compradores, width='stretch', hide_index=True)
         else:
             st.info("Nenhuma negociação acima da meta.")
             
@@ -314,27 +279,40 @@ with aba1:
         st.markdown("### 🔝 Top Fornecedores (Economia Gerada)")
         df_forn_sav = df_filtrado.groupby('FORNECEDOR')['SAVING COMPRADOR'].sum().reset_index()
         df_forn_sav = df_forn_sav.sort_values(by='SAVING COMPRADOR', ascending=False).head(5)
-        st.dataframe(df_forn_sav.rename(columns={'SAVING COMPRADOR': 'Economia'}).style.format({'Economia': 'R$ {:,.2f}'}), use_container_width=True, hide_index=True)
+        st.dataframe(df_forn_sav.rename(columns={'SAVING COMPRADOR': 'Economia'}).style.format({'Economia': 'R$ {:,.2f}'}), width='stretch', hide_index=True)
 
-# --- ABA 2: VENCIMENTOS (Mantida e Melhorada) ---
+# --- ABA 2: VENCIMENTOS (CORREÇÃO DO INDEX ERROR) ---
 with aba2:
     st.subheader("Controle Dinâmico de Entregas e Ferramentas")
     
     with st.container():
         st.markdown("### 💬 Assistente de Cobrança (WhatsApp)")
-        df_atrasados_lista = df_filtrado[df_filtrado['CATEGORIA_PRAZO'] == 'Atrasado']
+        df_atrasados_lista = df_filtrado[df_filtrado['CATEGORIA_PRAZO'] == 'Atrasado'].copy()
         
         if not df_atrasados_lista.empty:
-            col_msg1, col_msg2 = st.columns([1, 2])
-            with col_msg1:
-                pedido_sel = st.selectbox("Selecione o Pedido em atraso:", df_atrasados_lista['Nº PEDIDO'].unique())
             
-            with col_msg2:
-                dados_pedido = df_atrasados_lista[df_atrasados_lista['Nº PEDIDO'] == pedido_sel].iloc[0]
-                desc_item = dados_pedido.get('DESCRIÇÃO DO ITEM ', 'Material solicitado')
+            # CORREÇÃO: Limpando registros vazios ('nan', nulos, vazios) para não bugar o selectbox
+            pedidos_validos = [p for p in df_atrasados_lista['Nº PEDIDO'].unique() if str(p).strip().lower() not in ['nan', 'none', '', 'nat']]
+            
+            if pedidos_validos:
+                col_msg1, col_msg2 = st.columns([1, 2])
+                with col_msg1:
+                    pedido_sel = st.selectbox("Selecione o Pedido em atraso:", pedidos_validos)
                 
-                mensagem = f"Olá, equipe da *{dados_pedido['FORNECEDOR']}*.\n\nConsta em nosso sistema de suprimentos que o Pedido *{pedido_sel}* ({desc_item}) encontra-se *{dados_pedido['DESCRICAO_VENCIMENTO']}*.\n\nGostaríamos de um posicionamento urgente sobre a previsão de entrega.\n\n*Suprimentos - Gree Electric*"
-                st.code(mensagem, language="text")
+                with col_msg2:
+                    df_pedido_selecionado = df_atrasados_lista[df_atrasados_lista['Nº PEDIDO'] == str(pedido_sel)]
+                    
+                    # Checagem de segurança dupla (Evita o IndexError: out-of-bounds)
+                    if not df_pedido_selecionado.empty:
+                        dados_pedido = df_pedido_selecionado.iloc[0]
+                        desc_item = dados_pedido.get('DESCRIÇÃO DO ITEM ', 'Material solicitado')
+                        
+                        mensagem = f"Olá, equipe da *{dados_pedido['FORNECEDOR']}*.\n\nConsta em nosso sistema de suprimentos que o Pedido *{pedido_sel}* ({desc_item}) encontra-se *{dados_pedido['DESCRICAO_VENCIMENTO']}*.\n\nGostaríamos de um posicionamento urgente sobre a previsão de entrega.\n\n*Suprimentos - Gree Electric*"
+                        st.code(mensagem, language="text")
+                    else:
+                        st.warning("Detalhes deste pedido não encontrados.")
+            else:
+                st.warning("⚠️ Foram encontrados itens em atraso, mas eles **ainda não possuem Número de Pedido gerado** na planilha (a célula está em branco).")
         else:
             st.success("Não há pedidos atrasados para cobrar no momento. Ótimo trabalho!")
             
@@ -354,7 +332,7 @@ with aba2:
     with col_ven2:
         st.markdown("### 🔴 Painel Crítico: Atrasados")
         if not df_atrasados_lista.empty:
-            st.dataframe(df_atrasados_lista[['Nº PEDIDO', 'FORNECEDOR', 'COMPRADOR', 'DESCRICAO_VENCIMENTO']], use_container_width=True, hide_index=True, height=200)
+            st.dataframe(df_atrasados_lista[['Nº PEDIDO', 'FORNECEDOR', 'COMPRADOR', 'DESCRICAO_VENCIMENTO']], width='stretch', hide_index=True, height=200)
         else:
             st.info("Sem atrasos no momento.")
             
@@ -362,7 +340,7 @@ with aba2:
         if 'CATEGORIA_PRAZO' in df_filtrado.columns:
             df_radar = df_filtrado[df_filtrado['CATEGORIA_PRAZO'] == 'No Prazo'][['Nº PEDIDO', 'FORNECEDOR', 'COMPRADOR', 'DESCRICAO_VENCIMENTO']]
             df_radar = df_radar[df_radar['DESCRICAO_VENCIMENTO'].str.contains("Vence|Faltam", na=False)]
-            st.dataframe(df_radar, use_container_width=True, hide_index=True, height=200)
+            st.dataframe(df_radar, width='stretch', hide_index=True, height=200)
 
 # --- ABA 3: AVALIAÇÃO DE FORNECEDORES ---
 with aba3:
@@ -374,7 +352,6 @@ with aba3:
         if 'SETOR' in df_filtrado.columns:
             df_setor_vol = df_filtrado['SETOR'].value_counts().reset_index().head(10)
             df_setor_vol.columns = ['SETOR', 'REQUISIÇÕES']
-            # Gráfico de barras horizontal mais limpo
             fig_setor = px.bar(df_setor_vol, x='REQUISIÇÕES', y='SETOR', orientation='h', color_discrete_sequence=["#8B5CF6"])
             fig_setor.update_layout(
                 plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", 
@@ -404,7 +381,7 @@ with aba3:
             
             st.dataframe(
                 df_score[['FORNECEDOR', 'Classificação', 'Total Pedidos', 'Qtd Atrasos']], 
-                use_container_width=True, 
+                width='stretch', 
                 hide_index=True,
                 height=350
             )
