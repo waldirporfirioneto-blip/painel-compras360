@@ -220,49 +220,61 @@ with aba1:
         df_comprador, x="COMPRADOR", y="SAVING COMPRADOR", text="TEXTO_GRAFICO",
         color_discrete_sequence=["#10B981"], height=400
     )
-    fig1.update_traces(textposition='outside', textfont_size=12)
+    
+    # CORREÇÃO DO "K": O texttemplate='%{text}' obriga o Plotly a usar a nossa formatação!
+    fig1.update_traces(texttemplate='%{text}', textposition='outside', textfont_size=12)
+    
     fig1.update_layout(
         plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
         yaxis=dict(showgrid=False, showticklabels=False, title=""),
         xaxis=dict(title="", tickfont_size=14, tickangle=0),
         margin=dict(l=0, r=0, t=30, b=0)
     )
+    
     if df_comprador['SAVING COMPRADOR'].max() > 0:
         fig1.update_yaxes(range=[0, df_comprador['SAVING COMPRADOR'].max() * 1.15])
     
-    st.plotly_chart(fig1, use_container_width=True)
+    st.plotly_chart(fig1, width='stretch')
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # NOVO: Gráfico de Evolução por Mês - CORRIGIDO
+    # 2. NOVO: Gráfico de Evolução por Mês - CORRIGIDO
     st.markdown("---")
     st.subheader("📈 Evolução de Saving por Mês")
     
     if 'MÊS REFERENTE' in df_filtrado.columns:
-        df_evolucao = df_filtrado.groupby('MÊS REFERENTE')['SAVING COMPRADOR'].sum().reset_index()
+        # Tratamento de segurança contra células vazias nos meses
+        df_meses = df_filtrado.copy()
+        df_meses['MÊS REFERENTE'] = df_meses['MÊS REFERENTE'].fillna('Não Informado').astype(str)
         
-        # Correção: Removemos a trava categórica (que causava o erro "Categorical warning" e zerava o gráfico).
-        # Agora ele simplesmente lê o mês como ele estiver escrito na planilha e ordena naturalmente.
-        df_evolucao = df_evolucao.sort_values('MÊS REFERENTE')
+        df_evolucao = df_meses.groupby('MÊS REFERENTE')['SAVING COMPRADOR'].sum().reset_index()
+        
+        # Cria um texto para cada ponto do gráfico de linha
+        df_evolucao['TEXTO_EVOLUCAO'] = df_evolucao['SAVING COMPRADOR'].apply(formatar_moeda)
 
         fig_linha = px.line(
             df_evolucao, 
             x="MÊS REFERENTE", 
             y="SAVING COMPRADOR", 
+            text="TEXTO_EVOLUCAO", # Isso garante que o valor apareça mesmo se houver só 1 mês
             markers=True,
             color_discrete_sequence=["#10B981"]
         )
         
+        fig_linha.update_traces(textposition="top center")
+        
         fig_linha.update_layout(
             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-            yaxis=dict(title="Valor Economizado (R$)"),
-            xaxis=dict(title=""),
+            yaxis=dict(title="Valor Economizado (R$)", showgrid=True, gridcolor='rgba(255,255,255,0.1)'),
+            # CORREÇÃO DO EIXO X: Força o Plotly a entender que são Nomes (Categorias) e não Números (-1, 0, 1)
+            xaxis=dict(title="", type='category'), 
             hovermode="x unified"
         )
-        st.plotly_chart(fig_linha, use_container_width=True)
+        
+        st.plotly_chart(fig_linha, width='stretch')
         st.markdown("<br>", unsafe_allow_html=True)
 
-    # 2. Tabelas lado a lado na parte de baixo (Atualizadas para o novo padrão Streamlit)
+    # 3. Tabelas lado a lado na parte de baixo
     col_rank1, col_rank2 = st.columns(2)
     
     with col_rank1:
