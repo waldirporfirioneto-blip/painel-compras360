@@ -186,24 +186,53 @@ if not df_filtrado.empty:
 
 st.divider()
 
-# KPIs Superiores
+# KPIs Superiores - NOVO LAYOUT (CARDS)
 total_saving = df_filtrado['SAVING COMPRADOR'].sum()
 total_pedidos = df_filtrado['Nº PEDIDO'].nunique()
 total_fornecedores = df_filtrado['FORNECEDOR'].nunique()
 taxa_sla = 0
+
 if not df_filtrado.empty:
     df_sla_valido = df_filtrado[df_filtrado['CATEGORIA_PRAZO'] != 'Cancelado']
     if not df_sla_valido.empty:
         pedidos_no_prazo = len(df_sla_valido[df_sla_valido['CATEGORIA_PRAZO'].isin(['Finalizado', 'No Prazo'])])
         taxa_sla = (pedidos_no_prazo / len(df_sla_valido)) * 100
 
-col1, col2, col3, col4, col5 = st.columns([1.8, 1.2, 1.1, 1.1, 1.1])
-col1.metric("Economia Total (Saving)", formatar_moeda(total_saving))
-col2.metric("🎯 Taxa de SLA (Sucesso)", f"{taxa_sla:.1f}%")
-col3.metric("Total de Pedidos", total_pedidos)
-col4.metric("Requisições", df_filtrado['Nº REQUISIÇÃO'].nunique())
-col5.metric("Fornecedores Ativos", total_fornecedores)
+col1, col2, col3, col4 = st.columns(4)
 
+with col1:
+    st.markdown(f"""
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border-left: 5px solid #10B981;">
+            <h4 style="margin:0; color: #6c757d; font-size: 14px;">💰 Economia Total (Saving)</h4>
+            <h2 style="margin:0; color: #212529;">{formatar_moeda(total_saving)}</h2>
+        </div>
+    """, unsafe_allow_html=True)
+
+with col2:
+    st.markdown(f"""
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border-left: 5px solid #3B82F6;">
+            <h4 style="margin:0; color: #6c757d; font-size: 14px;">🎯 Taxa de Sucesso (SLA)</h4>
+            <h2 style="margin:0; color: #212529;">{taxa_sla:.1f}%</h2>
+        </div>
+    """, unsafe_allow_html=True)
+
+with col3:
+    st.markdown(f"""
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border-left: 5px solid #F59E0B;">
+            <h4 style="margin:0; color: #6c757d; font-size: 14px;">📦 Volume de Pedidos</h4>
+            <h2 style="margin:0; color: #212529;">{total_pedidos}</h2>
+        </div>
+    """, unsafe_allow_html=True)
+
+with col4:
+    st.markdown(f"""
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border-left: 5px solid #8B5CF6;">
+            <h4 style="margin:0; color: #6c757d; font-size: 14px;">🤝 Fornecedores Ativos</h4>
+            <h2 style="margin:0; color: #212529;">{total_fornecedores}</h2>
+        </div>
+    """, unsafe_allow_html=True)
+
+st.markdown("<br>", unsafe_allow_html=True)
 st.divider()
 
 # ABAS DO SISTEMA
@@ -238,6 +267,36 @@ with aba1:
     
     st.markdown("<br>", unsafe_allow_html=True) # Espaço
     
+    # NOVO: Gráfico de Evolução por Mês
+    st.markdown("---")
+    st.subheader("📈 Evolução de Saving por Mês")
+    
+    if 'MÊS REFERENTE' in df_filtrado.columns:
+        # Agrupando os dados por mês
+        df_evolucao = df_filtrado.groupby('MÊS REFERENTE')['SAVING COMPRADOR'].sum().reset_index()
+        
+        # Ordenação dos meses
+        ordem_meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+        df_evolucao['MÊS REFERENTE'] = pd.Categorical(df_evolucao['MÊS REFERENTE'], categories=ordem_meses, ordered=True)
+        df_evolucao = df_evolucao.sort_values('MÊS REFERENTE')
+
+        fig_linha = px.line(
+            df_evolucao, 
+            x="MÊS REFERENTE", 
+            y="SAVING COMPRADOR", 
+            markers=True,
+            color_discrete_sequence=["#10B981"]
+        )
+        
+        fig_linha.update_layout(
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            yaxis=dict(title="Valor Economizado (R$)"),
+            xaxis=dict(title=""),
+            hovermode="x unified"
+        )
+        st.plotly_chart(fig_linha, use_container_width=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+
     # 2. Tabelas lado a lado na parte de baixo
     col_rank1, col_rank2 = st.columns(2)
     
