@@ -314,7 +314,7 @@ with aba1:
     col_rank1, col_rank2 = st.columns(2)
     
    with col_rank1:
-        st.markdown("Ranking: Metas Batidas (R$ 5.000)")
+        st.markdown("### 🏆 Ranking: Metas Batidas (> R$ 5.000)")
         df_metas_rank = df_filtrado[df_filtrado['SAVING COMPRADOR'] >= 5000]
         
         if not df_metas_rank.empty:
