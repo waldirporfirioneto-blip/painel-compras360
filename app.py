@@ -255,10 +255,22 @@ with aba1:
     
     if 'MÊS REFERENTE' in df_filtrado.columns:
         df_meses = df_filtrado.copy()
-        df_meses['MÊS REFERENTE'] = df_meses['MÊS REFERENTE'].fillna('Não Informado').astype(str)
+        
+        # Padroniza tudo para maiúsculo para garantir que o código reconheça as palavras
+        df_meses['MÊS REFERENTE'] = df_meses['MÊS REFERENTE'].fillna('Não Informado').astype(str).str.strip().str.upper()
         
         df_evolucao = df_meses.groupby('MÊS REFERENTE')['SAVING COMPRADOR'].sum().reset_index()
-        df_evolucao = df_evolucao.sort_values('MÊS REFERENTE')
+        
+        # 1. Dicionário ensinando a ordem cronológica
+        ordem_cronologica = {
+            'JANEIRO': 1, 'FEVEREIRO': 2, 'MARÇO': 3, 'ABRIL': 4,
+            'MAIO': 5, 'JUNHO': 6, 'JULHO': 7, 'AGOSTO': 8,
+            'SETEMBRO': 9, 'OUTUBRO': 10, 'NOVEMBRO': 11, 'DEZEMBRO': 12
+        }
+        
+        # 2. Criamos uma coluna invisível com os números dos meses e ordenamos por ela
+        df_evolucao['PESO_MES'] = df_evolucao['MÊS REFERENTE'].map(ordem_cronologica).fillna(99)
+        df_evolucao = df_evolucao.sort_values('PESO_MES')
         
         df_evolucao['VALOR_REAL'] = df_evolucao['SAVING COMPRADOR'].apply(
             lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -280,14 +292,20 @@ with aba1:
         
         fig_linha.update_layout(
             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-            # tickformat=".0f" proíbe o Plotly de usar o "k" (Ex: 150000 em vez de 150k)
             yaxis=dict(title="Valor Economizado (R$)", showgrid=True, gridcolor='rgba(255,255,255,0.1)', tickformat=".0f"),
-            xaxis=dict(title="", type='category'), 
+            # 3. Força o Plotly a respeitar a ordem cronológica que acabamos de definir
+            xaxis=dict(
+                title="", 
+                type='category',
+                categoryorder='array', 
+                categoryarray=df_evolucao['MÊS REFERENTE'].tolist()
+            ), 
             hovermode="x unified"
         )
         
         # Margem superior para o texto da linha não cortar
-        fig_linha.update_yaxes(range=[0, df_evolucao['SAVING COMPRADOR'].max() * 1.25])
+        if df_evolucao['SAVING COMPRADOR'].max() > 0:
+            fig_linha.update_yaxes(range=[0, df_evolucao['SAVING COMPRADOR'].max() * 1.25])
         
         st.plotly_chart(fig_linha, width='stretch')
         st.markdown("<br>", unsafe_allow_html=True)
@@ -373,45 +391,66 @@ with aba2:
             st.dataframe(df_radar, width='stretch', hide_index=True, height=200)
 
 # --- ABA 3: AVALIAÇÃO DE FORNECEDORES ---
+# --- ABA 3: AVALIAÇÃO DE FORNECEDORES ---
 with aba3:
     st.subheader("Avaliação de Fornecedores e Demanda")
     
-    col_op1, col_op2 = st.columns([1.2, 1.8])
-    with col_op1:
-        st.markdown("### 🏭 Demanda por Setor")
-        if 'SETOR' in df_filtrado.columns:
-            df_setor_vol = df_filtrado['SETOR'].value_counts().reset_index().head(10)
-            df_setor_vol.columns = ['SETOR', 'REQUISIÇÕES']
-            fig_setor = px.bar(df_setor_vol, x='REQUISIÇÕES', y='SETOR', orientation='h', color_discrete_sequence=["#8B5CF6"])
-            fig_setor.update_layout(
-                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", 
-                yaxis=dict(autorange="reversed", title=""),
-                xaxis=dict(title="", showgrid=False)
-            )
-            st.plotly_chart(fig_setor, use_container_width=True)
+    # 1. Gráfico de Demanda ocupando toda a parte superior (Eixo Horizontal)
+    st.markdown("### 🏭 Demanda por Setor")
+    if 'SETOR' in df_filtrado.columns:
+        df_setor_vol = df_filtrado['SETOR'].value_counts().reset_index().head(10)
+        df_setor_vol.columns = ['SETOR', 'REQUISIÇÕES']
+        
+        # Transformado em barras verticais para espalhar pela tela e ter o número em cima
+        fig_setor = px.bar(
+            df_setor_vol, 
+            x='SETOR', 
+            y='REQUISIÇÕES', 
+            text='REQUISIÇÕES',
+            color_discrete_sequence=["#8B5CF6"],
+            height=350
+        )
+        
+        fig_setor.update_traces(textposition='outside', textfont_size=12)
+        
+        fig_setor.update_layout(
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", 
+            yaxis=dict(showgrid=False, showticklabels=False, title=""), # Esconde eixo Y limpo
+            xaxis=dict(title="", tickfont_size=12),
+            margin=dict(t=30, b=0, l=0, r=0)
+        )
+        
+        # Dá um espaço extra no topo para o número não ser cortado
+        if df_setor_vol['REQUISIÇÕES'].max() > 0:
+            fig_setor.update_yaxes(range=[0, df_setor_vol['REQUISIÇÕES'].max() * 1.15])
             
-    with col_op2:
-        st.markdown("### ⭐ Score de Risco de Fornecedores")
-        st.markdown("Cruza volume total de pedidos com falhas de entrega.")
-        if not df_filtrado.empty:
-            df_forn_total = df_filtrado.groupby('FORNECEDOR').size().reset_index(name='Total Pedidos')
-            df_forn_atrasos = df_filtrado[df_filtrado['CATEGORIA_PRAZO'] == 'Atrasado'].groupby('FORNECEDOR').size().reset_index(name='Qtd Atrasos')
+        st.plotly_chart(fig_setor, width='stretch')
+        
+    st.divider() # Linha para separar as seções
+    
+    # 2. Tabela de Score ocupando a parte inferior inteira
+    st.markdown("### ⭐ Score de Risco de Fornecedores")
+    st.markdown("Cruza volume total de pedidos com falhas de entrega.")
+    if not df_filtrado.empty:
+        df_forn_total = df_filtrado.groupby('FORNECEDOR').size().reset_index(name='Total Pedidos')
+        df_forn_atrasos = df_filtrado[df_filtrado['CATEGORIA_PRAZO'] == 'Atrasado'].groupby('FORNECEDOR').size().reset_index(name='Qtd Atrasos')
+        
+        df_score = pd.merge(df_forn_total, df_forn_atrasos, on='FORNECEDOR', how='left').fillna(0)
+        df_score['Taxa Falha'] = df_score['Qtd Atrasos'] / df_score['Total Pedidos']
+        
+        def gerar_nota(linha):
+            if linha['Taxa Falha'] == 0: return "A ⭐⭐⭐"
+            elif linha['Taxa Falha'] <= 0.2: return "B ⭐⭐"
+            elif linha['Taxa Falha'] <= 0.5: return "C ⭐"
+            else: return "D ⚠️"
             
-            df_score = pd.merge(df_forn_total, df_forn_atrasos, on='FORNECEDOR', how='left').fillna(0)
-            df_score['Taxa Falha'] = df_score['Qtd Atrasos'] / df_score['Total Pedidos']
-            
-            def gerar_nota(linha):
-                if linha['Taxa Falha'] == 0: return "A ⭐⭐⭐"
-                elif linha['Taxa Falha'] <= 0.2: return "B ⭐⭐"
-                elif linha['Taxa Falha'] <= 0.5: return "C ⭐"
-                else: return "D ⚠️"
-                
-            df_score['Classificação'] = df_score.apply(gerar_nota, axis=1)
-            df_score = df_score.sort_values(by=['Total Pedidos', 'Taxa Falha'], ascending=[False, True]).head(15)
-            
-            st.dataframe(
-                df_score[['FORNECEDOR', 'Classificação', 'Total Pedidos', 'Qtd Atrasos']], 
-                width='stretch', 
-                hide_index=True,
-                height=350
+        df_score['Classificação'] = df_score.apply(gerar_nota, axis=1)
+        df_score = df_score.sort_values(by=['Total Pedidos', 'Taxa Falha'], ascending=[False, True]).head(15)
+        
+        # Adicionado width='stretch' para a tabela preencher 100% do espaço
+        st.dataframe(
+            df_score[['FORNECEDOR', 'Classificação', 'Total Pedidos', 'Qtd Atrasos']], 
+            width='stretch', 
+            hide_index=True
+        
             )
