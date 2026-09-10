@@ -163,13 +163,12 @@ st.sidebar.download_button(
 st.title("SUPPLY CHAIN ANALYTICS | Compras 360")
 st.markdown("Portal de inteligência de compras e acompanhamento de SLA.")
 
-# Função ATUALIZADA: Sem letras "K", mostrando o valor completo.
 def formatar_moeda(valor):
     return f"R$ {valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
 
 st.divider()
 
-# KPIs Superiores - NOVO LAYOUT (CARDS)
+# KPIs Superiores
 total_saving = df_filtrado['SAVING COMPRADOR'].sum() if 'SAVING COMPRADOR' in df_filtrado.columns else 0
 total_pedidos = df_filtrado['Nº PEDIDO'].nunique() if 'Nº PEDIDO' in df_filtrado.columns else 0
 total_fornecedores = df_filtrado['FORNECEDOR'].nunique() if 'FORNECEDOR' in df_filtrado.columns else 0
@@ -225,11 +224,9 @@ aba1, aba2, aba3 = st.tabs(["💰 Economia & Metas", "⏱️ Vencimentos & Cobra
 with aba1:
     st.subheader("Economia Total por Comprador")
     
-    # 1. Gráfico no topo, ocupando toda a largura
     df_comprador = df_filtrado.groupby("COMPRADOR")['SAVING COMPRADOR'].sum().reset_index()
     df_comprador = df_comprador.sort_values(by="SAVING COMPRADOR", ascending=False)
     
-    # Criamos a formatação real na força bruta direto no dataframe
     df_comprador['VALOR_REAL'] = df_comprador['SAVING COMPRADOR'].apply(
         lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     )
@@ -238,12 +235,11 @@ with aba1:
         df_comprador, 
         x="COMPRADOR", 
         y="SAVING COMPRADOR", 
-        text="VALOR_REAL", # Passa o texto formatado
+        text="VALOR_REAL", 
         color_discrete_sequence=["#10B981"], 
         height=400
     )
     
-    # AQUI ESTÁ A MÁGICA PARA MATAR O "K": texttemplate="%{text}" força o Plotly a usar a nossa string literal
     fig1.update_traces(
         texttemplate='%{text}', 
         textposition='outside', 
@@ -265,26 +261,23 @@ with aba1:
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # 2. Gráfico de Evolução por Mês - CORRIGIDO (Zero "K" e Eixo Forçado)
+    # 2. Gráfico de Evolução por Mês
     st.markdown("---")
     st.subheader("📈 Evolução de Saving por Mês")
     
     if 'MÊS REFERENTE' in df_filtrado.columns:
         df_meses = df_filtrado.copy()
         
-        # Padroniza tudo para maiúsculo para garantir que o código reconheça as palavras
         df_meses['MÊS REFERENTE'] = df_meses['MÊS REFERENTE'].fillna('Não Informado').astype(str).str.strip().str.upper()
         
         df_evolucao = df_meses.groupby('MÊS REFERENTE')['SAVING COMPRADOR'].sum().reset_index()
         
-        # 1. Dicionário ensinando a ordem cronológica
         ordem_cronologica = {
             'JANEIRO': 1, 'FEVEREIRO': 2, 'MARÇO': 3, 'ABRIL': 4,
             'MAIO': 5, 'JUNHO': 6, 'JULHO': 7, 'AGOSTO': 8,
             'SETEMBRO': 9, 'OUTUBRO': 10, 'NOVEMBRO': 11, 'DEZEMBRO': 12
         }
         
-        # 2. Criamos uma coluna invisível com os números dos meses e ordenamos por ela
         df_evolucao['PESO_MES'] = df_evolucao['MÊS REFERENTE'].map(ordem_cronologica).fillna(99)
         df_evolucao = df_evolucao.sort_values('PESO_MES')
         
@@ -309,7 +302,6 @@ with aba1:
         fig_linha.update_layout(
             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
             yaxis=dict(title="Valor Economizado (R$)", showgrid=True, gridcolor='rgba(255,255,255,0.1)', tickformat=".0f"),
-            # 3. Força o Plotly a respeitar a ordem cronológica que acabamos de definir
             xaxis=dict(
                 title="", 
                 type='category',
@@ -319,57 +311,55 @@ with aba1:
             hovermode="x unified"
         )
         
-        # Margem superior para o texto da linha não cortar
         if df_evolucao['SAVING COMPRADOR'].max() > 0:
             fig_linha.update_yaxes(range=[0, df_evolucao['SAVING COMPRADOR'].max() * 1.25])
         
         st.plotly_chart(fig_linha, width='stretch')
         st.markdown("<br>", unsafe_allow_html=True)
 
-    # 3. Tabelas lado a lado na parte de baixo
+    # 3. Tabelas lado a lado
     col_rank1, col_rank2 = st.columns(2)    
     
     with col_rank1:
-        st.markdown("Ranking: Metas Batidas (R$ 5.000)")
-        df_metas_rank = df_filtrado[df_filtrado['SAVING COMPRADOR'] >= 5000]
-        
-        if not df_metas_rank.empty:
-            # Agrupa contando a quantidade de metas batidas e somando o valor gerado nelas
-            rank_compradores = df_metas_rank.groupby('COMPRADOR').agg(
-                Qtd_Negociacoes=('SAVING COMPRADOR', 'count'),
-                Saving_Total=('SAVING COMPRADOR', 'sum')
-            ).reset_index()
+        st.markdown("### 🏆 Ranking: Metas Batidas (R$ 5.000 / Mês)")
+        if 'MÊS REFERENTE' in df_filtrado.columns:
+            # Agrupa por Comprador e Mês para validar a meta MENSAL (Cesta Básica)
+            df_mensal_meta = df_filtrado.groupby(['COMPRADOR', 'MÊS REFERENTE'], as_index=False)['SAVING COMPRADOR'].sum()
             
-            # Renomeia as colunas para a tabela ficar intuitiva
-            rank_compradores.columns = ['Comprador', 'Qtd Negociações', 'Saving Total']
+            # Filtra apenas os meses em que o Comprador atingiu R$ 5.000 ou mais na soma
+            df_metas_rank = df_mensal_meta[df_mensal_meta['SAVING COMPRADOR'] >= 5000]
             
-            # Ordena o pódio: 1º Quem bateu mais metas e 2º Quem trouxe mais dinheiro no desempate
-            rank_compradores = rank_compradores.sort_values(by=['Qtd Negociações', 'Saving Total'], ascending=[False, False])
-            
-            # Aplica a nossa função para formatar os valores direitinho (R$ 00,00)
-            rank_compradores['Saving Total'] = rank_compradores['Saving Total'].apply(formatar_moeda)
-            
-            st.dataframe(rank_compradores, width='stretch', hide_index=True)
+            if not df_metas_rank.empty:
+                rank_compradores = df_metas_rank.groupby('COMPRADOR').agg(
+                    Qtd_Meses=('MÊS REFERENTE', 'count'),
+                    Saving_Total=('SAVING COMPRADOR', 'sum')
+                ).reset_index()
+                
+                rank_compradores.columns = ['Comprador', 'Meses na Meta', 'Saving Total']
+                rank_compradores = rank_compradores.sort_values(by=['Meses na Meta', 'Saving Total'], ascending=[False, False])
+                rank_compradores['Saving Total'] = rank_compradores['Saving Total'].apply(formatar_moeda)
+                
+                st.dataframe(rank_compradores, width='stretch', hide_index=True)
+            else:
+                st.info("Nenhum comprador bateu a meta mensal acumulada de R$ 5.000.")
         else:
-            st.info("Nenhuma negociação acima da meta.")
+             st.warning("Necessário a coluna 'MÊS REFERENTE' para calcular a meta mensal.")
             
     with col_rank2:
-        st.markdown("Top Fornecedores (Economia Gerada)")
+        st.markdown("### 🔝 Top Fornecedores (Economia Gerada)")
         df_forn_sav = df_filtrado.groupby('FORNECEDOR')['SAVING COMPRADOR'].sum().reset_index()
         df_forn_sav = df_forn_sav.sort_values(by='SAVING COMPRADOR', ascending=False).head(5)
         st.dataframe(df_forn_sav.rename(columns={'SAVING COMPRADOR': 'Economia'}).style.format({'Economia': 'R$ {:,.2f}'}), width='stretch', hide_index=True)
 
-# --- ABA 2: VENCIMENTOS (CORREÇÃO DO INDEX ERROR) ---
+# --- ABA 2: VENCIMENTOS ---
 with aba2:
     st.subheader("Controle Dinâmico de Entregas e Ferramentas")
     
     with st.container():
-        st.markdown("Assistente de Cobrança (WhatsApp)")
+        st.markdown("### 💬 Assistente de Cobrança (WhatsApp)")
         df_atrasados_lista = df_filtrado[df_filtrado['CATEGORIA_PRAZO'] == 'Atrasado'].copy()
         
         if not df_atrasados_lista.empty:
-            
-            # CORREÇÃO: Limpando registros vazios ('nan', nulos, vazios) para não bugar o selectbox
             pedidos_validos = [p for p in df_atrasados_lista['Nº PEDIDO'].unique() if str(p).strip().lower() not in ['nan', 'none', '', 'nat']]
             
             if pedidos_validos:
@@ -380,7 +370,6 @@ with aba2:
                 with col_msg2:
                     df_pedido_selecionado = df_atrasados_lista[df_atrasados_lista['Nº PEDIDO'] == str(pedido_sel)]
                     
-                    # Checagem de segurança dupla (Evita o IndexError: out-of-bounds)
                     if not df_pedido_selecionado.empty:
                         dados_pedido = df_pedido_selecionado.iloc[0]
                         desc_item = dados_pedido.get('DESCRIÇÃO DO ITEM ', 'Material solicitado')
@@ -421,13 +410,11 @@ with aba2:
             st.dataframe(df_radar, width='stretch', hide_index=True, height=200)
 
 # --- ABA 3: AVALIAÇÃO DE FORNECEDORES ---
-# --- ABA 3: AVALIAÇÃO DE FORNECEDORES ---
-# --- ABA 3: AVALIAÇÃO DE FORNECEDORES ---
 with aba3:
     st.subheader("Avaliação de Fornecedores e Demanda")
     
     # 1. Gráfico de Demanda ocupando toda a parte superior
-    st.markdown("Valor Total Comprado por Setor")
+    st.markdown("### 🏭 Valor Total Comprado por Setor")
     if 'SETOR' in df_filtrado.columns:
         
         # Agrupamos somando o valor comprado e a economia, e contando requisições
@@ -494,10 +481,8 @@ with aba3:
         df_score['Classificação'] = df_score.apply(gerar_nota, axis=1)
         df_score = df_score.sort_values(by=['Total Pedidos', 'Taxa Falha'], ascending=[False, True]).head(15)
         
-        # Adicionado width='stretch' para a tabela preencher 100% do espaço
         st.dataframe(
             df_score[['FORNECEDOR', 'Classificação', 'Total Pedidos', 'Qtd Atrasos']], 
             width='stretch', 
             hide_index=True
-        
-            )
+        )
