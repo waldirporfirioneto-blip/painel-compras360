@@ -409,6 +409,7 @@ with aba2:
             df_radar = df_radar[df_radar['DESCRICAO_VENCIMENTO'].str.contains("Vence|Faltam", na=False)]
             st.dataframe(df_radar, width='stretch', hide_index=True, height=200)
 
+
 # --- ABA 3: AVALIAÇÃO DE FORNECEDORES ---
 with aba3:
     st.subheader("Avaliação de Fornecedores e Demanda")
@@ -459,6 +460,23 @@ with aba3:
             fig_setor.update_yaxes(range=[0, df_setor_vol['GASTO_TOTAL'].max() * 1.15])
             
         st.plotly_chart(fig_setor, width='stretch')
+        
+        # --- NOVIDADE: Tabela Detalhada por Setor ---
+        st.markdown("#### 📊 Detalhamento de Compras por Setor")
+        
+        # Selecionamos apenas as colunas úteis e copiamos
+        df_tabela_setor = df_setor_vol[['SETOR', 'REQUISIÇÕES', 'GASTO_TOTAL', 'ECONOMIA']].copy()
+        
+        # Renomeamos para ficar bonito na tela
+        df_tabela_setor.columns = ['Setor', 'Qtd Requisições', 'Valor Comprado', 'Economia Gerada']
+        
+        # Formatamos o dinheiro (chamando aquela nossa função lá de cima)
+        df_tabela_setor['Valor Comprado'] = df_tabela_setor['Valor Comprado'].apply(formatar_moeda)
+        df_tabela_setor['Economia Gerada'] = df_tabela_setor['Economia Gerada'].apply(formatar_moeda)
+        
+        # Exibimos a tabela esticada na tela
+        st.dataframe(df_tabela_setor, width='stretch', hide_index=True)
+        # --------------------------------------------
         
     st.divider()    
     
