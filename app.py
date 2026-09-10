@@ -55,6 +55,22 @@ def carregar_dados(arquivo):
         df['SAVING COMPRADOR'] = pd.to_numeric(df['SAVING COMPRADOR'], errors='coerce').fillna(0)
         df['Nº PEDIDO'] = df['Nº PEDIDO'].astype(str)
         
+        # --- NOVIDADE: CALCULANDO O VALOR TOTAL COMPRADO ---
+        if 'VALOR UNIT DO ITEM' in df.columns:
+            df['VALOR UNIT DO ITEM'] = pd.to_numeric(df['VALOR UNIT DO ITEM'], errors='coerce').fillna(0)
+            # Tenta achar a coluna de quantidade. Se não achar, assume que o Valor Unitário é o total.
+            if 'QUANTIDADE' in df.columns:
+                df['QTD_TEMP'] = pd.to_numeric(df['QUANTIDADE'], errors='coerce').fillna(1)
+                df['VALOR TOTAL COMPRADO'] = df['VALOR UNIT DO ITEM'] * df['QTD_TEMP']
+            elif 'QTD' in df.columns:
+                df['QTD_TEMP'] = pd.to_numeric(df['QTD'], errors='coerce').fillna(1)
+                df['VALOR TOTAL COMPRADO'] = df['VALOR UNIT DO ITEM'] * df['QTD_TEMP']
+            else:
+                df['VALOR TOTAL COMPRADO'] = df['VALOR UNIT DO ITEM']
+        else:
+            df['VALOR TOTAL COMPRADO'] = 0
+        # ---------------------------------------------------
+        
         if 'ANO' in df.columns:
             df['ANO'] = df['ANO'].fillna(0).astype(int).astype(str).replace('0', 'Não Informado')
             
@@ -406,41 +422,58 @@ with aba2:
 
 # --- ABA 3: AVALIAÇÃO DE FORNECEDORES ---
 # --- ABA 3: AVALIAÇÃO DE FORNECEDORES ---
+# --- ABA 3: AVALIAÇÃO DE FORNECEDORES ---
 with aba3:
     st.subheader("Avaliação de Fornecedores e Demanda")
     
-    # 1. Gráfico de Demanda ocupando toda a parte superior (Eixo Horizontal)
-    st.markdown("Demanda por Setor")
+    # 1. Gráfico de Demanda ocupando toda a parte superior
+    st.markdown("Valor Total Comprado por Setor")
     if 'SETOR' in df_filtrado.columns:
-        df_setor_vol = df_filtrado['SETOR'].value_counts().reset_index().head(10)
-        df_setor_vol.columns = ['SETOR', 'REQUISIÇÕES']
         
-        # Transformado em barras verticais para espalhar pela tela e ter o número em cima
+        # Agrupamos somando o valor comprado e a economia, e contando requisições
+        df_setor_vol = df_filtrado.groupby('SETOR', as_index=False).agg(
+            REQUISIÇÕES=('SETOR', 'count'),
+            ECONOMIA=('SAVING COMPRADOR', 'sum'),
+            GASTO_TOTAL=('VALOR TOTAL COMPRADO', 'sum') if 'VALOR TOTAL COMPRADO' in df_filtrado.columns else ('SAVING COMPRADOR', 'sum')
+        )
+        
+        # Ordenamos os setores do que mais gastou para o que menos gastou
+        df_setor_vol = df_setor_vol.sort_values(by='GASTO_TOTAL', ascending=False).head(10)
+        
+        # Cria a string em Reais para aparecer no gráfico
+        df_setor_vol['GASTO_FORMATADO'] = df_setor_vol['GASTO_TOTAL'].apply(formatar_moeda)
+        df_setor_vol['ECONOMIA_FORMATADA'] = df_setor_vol['ECONOMIA'].apply(formatar_moeda)
+        
         fig_setor = px.bar(
             df_setor_vol, 
             x='SETOR', 
-            y='REQUISIÇÕES', 
-            text='REQUISIÇÕES',
+            y='GASTO_TOTAL', 
+            text='GASTO_FORMATADO', # Agora exibe o Gasto Total em cima da barra
+            custom_data=['REQUISIÇÕES', 'ECONOMIA_FORMATADA'], 
             color_discrete_sequence=["#8B5CF6"],
             height=350
         )
         
-        fig_setor.update_traces(textposition='outside', textfont_size=12)
+        # Hovertemplate mostra o Gasto, a Quantidade E a Economia tudo junto
+        fig_setor.update_traces(
+            textposition='outside', 
+            textfont_size=12,
+            hovertemplate="<b>Setor:</b> %{x}<br><b>Valor Comprado:</b> %{text}<br><b>Requisições:</b> %{customdata[0]}<br><b>Economia Gerada:</b> %{customdata[1]}<extra></extra>"
+        )
         
         fig_setor.update_layout(
             plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", 
-            yaxis=dict(showgrid=False, showticklabels=False, title=""), # Esconde eixo Y limpo
+            yaxis=dict(showgrid=False, showticklabels=False, title=""),
             xaxis=dict(title="", tickfont_size=12),
             margin=dict(t=30, b=0, l=0, r=0)
         )
         
-        # Dá um espaço extra no topo para o número não ser cortado
-        if df_setor_vol['REQUISIÇÕES'].max() > 0:
-            fig_setor.update_yaxes(range=[0, df_setor_vol['REQUISIÇÕES'].max() * 1.15])
+        if df_setor_vol['GASTO_TOTAL'].max() > 0:
+            fig_setor.update_yaxes(range=[0, df_setor_vol['GASTO_TOTAL'].max() * 1.15])
             
         st.plotly_chart(fig_setor, width='stretch')
         
-    st.divider() # Linha para separar as seções
+    st.divider()    
     
     # 2. Tabela de Score ocupando a parte inferior inteira
     st.markdown("### ⭐ Score de Risco de Fornecedores")
